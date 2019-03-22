@@ -18,17 +18,24 @@ import (
 //ClientListener ...
 type ClientListener interface {
 	ReceiveMessage(client *Client, from, session, body string)
+	Connected()
+	Disconnected()
 }
 
 //Client ...
 type Client struct {
 	listener ClientListener
 
-	Username, Password string
-	Server             string
-	lastSent           *time.Time
-	lastReceived       *time.Time
-	running            bool
+	Username      string
+	Password      string
+	Server        string
+	UseTLS        bool
+	StartTLS      bool
+	AllowInsecure bool
+
+	lastSent     *time.Time
+	lastReceived *time.Time
+	running      bool
 
 	xmppClient *xmpp.Client
 	readCh     chan xmpp.Chat
@@ -36,9 +43,9 @@ type Client struct {
 
 //Start ...
 func (c *Client) Start() error {
-	useTLS := true
-	startTLS := true
-	allowInsecure := false
+	useTLS := c.UseTLS
+	startTLS := c.StartTLS
+	allowInsecure := c.AllowInsecure
 
 	log.D(`[Jabber]`, c.Username, `Connecting to`, c.Server)
 	for {
@@ -60,6 +67,9 @@ func (c *Client) Start() error {
 		}
 	}
 
+	if c.listener != nil {
+		c.listener.Connected()
+	}
 	log.I(`[Jabber]`, c.Username, `Connected.`)
 	c.running = true
 	go c.run()
@@ -85,6 +95,9 @@ func (c *Client) Stop() {
 	}()
 	log.D(`[Jabber] Stopping`, c.Username, c.Server)
 	c.running = false
+	if c.listener != nil {
+		c.listener.Disconnected()
+	}
 	c.xmppClient.Close()
 }
 
@@ -177,4 +190,8 @@ func (c *Client) SendMessage(to, body string) error {
 
 func (c *Client) IsRunning() bool {
 	return c.running
+}
+
+func NewClient(server, username, password string) *Client {
+	return &Client{Server: server, Username: username, Password: password, UseTLS: true, StartTLS: true, AllowInsecure: false}
 }
